@@ -1,0 +1,59 @@
+---
+
+- hosts: ble
+  become: true
+  tasks:
+
+  - name: Install dependencies.
+    register: updatesys
+    apt:
+      update_cache: yes
+      cache_valid_time: 3600
+      name:
+        - libusb-dev
+        - libdbus-1-dev
+        - libglib2.0-dev
+        - libudev-dev
+        - libical-dev
+        - libreadline-dev
+      state: present
+
+  - name: Download & extract bluez package.
+    unarchive:
+      src: http://www.kernel.org/pub/linux/bluetooth/bluez-5.37.tar.xz
+      remote_src: yes
+      dest: /home/ansible/
+
+# [TODO]: build this package and provide from a remote location?
+# If deploying something to a server it should be compiled and verified it's 
+# working instead of discovering bugs/issues @ deploy.
+
+  - name: Run configure library.
+    command: chdir=/home/ansible/bluez-5.37 ./configure --enable-library
+
+  - name: Build bluez binaries.
+    make: 
+      chdir: /home/ansible/bluez-5.37
+
+  - name: Install bluez binaries.
+    make: 
+      chdir: /home/ansible/bluez-5.37
+      target: install
+
+# END TODO
+
+  - name: Configure bluetooth service with ble features.
+    copy: "src=templates/bluetooth.service dest=/lib/systemd/system/bluetooth.service"
+
+  - name: Reload systemd & services.
+    command: 
+      with_items:
+      - systemctl daemon-reload
+      - systemctl restart bluetooth
+      - systemctl enable bluetooth
+
+  - name: Print service status.
+    register: svc_status
+    command: systemctl status bluetooth
+
+  - debug: msg="{{ svc_status.stdout }}"
